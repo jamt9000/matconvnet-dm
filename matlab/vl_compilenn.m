@@ -205,6 +205,7 @@ mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnconvt.' ext]) ;
 mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnpool.' ext]) ;
 mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnnormalize.' ext]) ;
 mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnbnorm.' ext]) ;
+mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnim2row.' ext]) ;
 
 % CPU-specific files
 lib_src{end+1} = fullfile(root,'matlab','src','bits','impl','im2row_cpu.cpp') ;
