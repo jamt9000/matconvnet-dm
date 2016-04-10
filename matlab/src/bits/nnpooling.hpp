@@ -21,6 +21,17 @@ namespace vl {
   enum PoolingMethod { vlPoolingMax, vlPoolingAverage } ;
 
   vl::Error
+  nnpooling_forward_switches(vl::Context& context,
+                    vl::Tensor output,
+					vl::Tensor poolSwitches,
+                    vl::Tensor data,
+                    PoolingMethod method,
+                    int poolHeight, int poolWidth,
+                    int strideY, int strideX,
+                    int padTop, int padBottom,
+                    int padLeft, int padRight) ;
+
+  vl::Error
   nnpooling_forward(vl::Context& context,
                     vl::Tensor output,
                     vl::Tensor data,

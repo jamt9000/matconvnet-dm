@@ -55,6 +55,50 @@ struct acc_max
   type* derDataActivePt ;
 } ;
 
+template <typename type>
+struct acc_max_switches
+{
+  inline acc_max_switches(int poolHeight, int poolWidth, type derOutput = 0)
+  :
+  value(-std::numeric_limits<type>::infinity()),
+  switchLocation(0),
+  derOutput(derOutput),
+  derDataActivePt(NULL)
+  { }
+
+  inline void accumulate_forward(type x, size_t index) {
+    //value = std::max(value, x) ;
+	if(x > value) {
+		value = x;
+	    switchLocation = index;
+    }
+  }
+
+  inline void accumulate_backward(type const* data, type* derDataPt) {
+    type x = *data ;
+    if (x > value) {
+      value = x ;
+      derDataActivePt = derDataPt ;
+    }
+  }
+
+  inline type done_forward() const {
+    return value ;
+  }
+
+  inline int64_t done_forward_switches() const {
+    return switchLocation ;
+  }
+  inline void done_backward() const {
+    if (derDataActivePt) { *derDataActivePt += derOutput ; }
+  }
+
+  type value ;
+  int64_t switchLocation;
+  type derOutput ;
+  type* derDataActivePt ;
+} ;
+
 /* ---------------------------------------------------------------- */
 /*                                           Average pooling helper */
 /* ---------------------------------------------------------------- */
@@ -118,6 +162,43 @@ struct acc_sum
  will share several input pixels xi; hence this will cause write conflicts if
  Pj are processed in parallel.
  */
+
+template<typename type, typename Accumulator> static inline void
+pooling_forward_switches_cpu(type* pooled,
+                    int64_t* poolSwitches,
+                    type const* data,
+                    size_t width, size_t height, size_t depth,
+                    size_t windowWidth, size_t windowHeight,
+                    size_t strideX, size_t strideY,
+                    size_t padLeft, size_t padRight, size_t padTop, size_t padBottom)
+{
+  int pooledWidth = (width + (padLeft + padRight) - windowWidth)/strideX + 1 ;
+  int pooledHeight = (height + (padTop + padBottom) - windowHeight)/strideY + 1 ;
+  for (int z = 0; z < depth; ++z) {
+    for (int y = 0; y < pooledHeight; ++y) {
+      for (int x = 0; x < pooledWidth; ++x) {
+        int x1 = x * (signed)strideX - (signed)padLeft ;
+        int y1 = y * (signed)strideY - (signed)padTop ;
+        int x2 = std::min(x1 + windowWidth, width) ;
+        int y2 = std::min(y1 + windowHeight, height) ;
+        x1 = std::max(x1, 0) ;
+        y1 = std::max(y1, 0) ;
+        Accumulator acc(y2 - y1, x2 - x1) ;
+        for (int v = y1 ; v < y2 ; ++v) {
+          for (int u = x1 ; u < x2 ; ++u) {
+            acc.accumulate_forward(data[v * width + u], (z * height + v ) * width + (u+1)) ;
+          }
+        }
+        pooled[y * pooledWidth + x] = acc.done_forward() ;
+		poolSwitches[y * pooledWidth + x] = acc.done_forward_switches() ;
+      }
+    }
+    data += width*height ;
+    pooled += pooledWidth*pooledHeight ;
+	poolSwitches += pooledWidth*pooledHeight ;
+  }
+}
+
 
 template<typename type, typename Accumulator> static inline void
 pooling_forward_cpu(type* pooled,
@@ -206,6 +287,30 @@ pooling_backward_cpu(type* derData,
 namespace vl { namespace impl {
 
   template <typename type>
+  struct pooling_max_switches<vl::CPU, type>
+  {
+    static vl::Error
+    forward(type* pooled,
+	        int64_t* switches,
+            type const* data,
+            size_t height, size_t width, size_t depth,
+            size_t poolHeight, size_t poolWidth,
+            size_t strideY, size_t strideX,
+            size_t padTop, size_t padBottom, size_t padLeft, size_t padRight)
+    {
+      pooling_forward_switches_cpu<type, acc_max_switches<type> > (pooled,
+		                           switches,
+                                   data,
+                                   height, width, depth,
+                                   poolHeight, poolWidth,
+                                   strideY, strideX,
+                                   padTop, padBottom, padLeft, padRight) ;
+      return vlSuccess ;
+    }
+
+  } ; // pooling_max_switches
+
+  template <typename type>
   struct pooling_max<vl::CPU, type>
   {
     static vl::Error
@@ -289,10 +394,12 @@ namespace vl { namespace impl {
 
 // Instantiations
 template struct vl::impl::pooling_max<vl::CPU, float> ;
+template struct vl::impl::pooling_max_switches<vl::CPU, float> ;
 template struct vl::impl::pooling_average<vl::CPU, float> ;
 
 #ifdef ENABLE_DOUBLE
 template struct vl::impl::pooling_max<vl::CPU, double> ;
+template struct vl::impl::pooling_max_switches<vl::CPU, double> ;
 template struct vl::impl::pooling_average<vl::CPU, double> ;
 #endif
 

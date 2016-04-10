@@ -31,6 +31,13 @@
 %     over the pooling region per channel) or 'avg' (compute the average
 %     value over the poolling region per channel).
 %
+%   `EnablePoolSwitches`::
+%     In forward mode this will return the pooling switches. Only works
+%     with 'max' pooling. 
+%   [Y, switches] = Y = VL_NNPOOL(X, [POOLY, POOLX], 'EnablePoolSwitches')
+%     switches is a int64 array of the same size as Y. Each element is an
+%     index into serialized X such that Y = X(switches)
+%
 %   The pooling window must be not larger than the padded image, i.e.
 %
 %     1 <= POOLY <= HEIGHT + (PADTOP + PADBOTTOM),

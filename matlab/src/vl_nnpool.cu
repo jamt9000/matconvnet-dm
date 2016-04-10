@@ -26,6 +26,7 @@ enum {
   opt_stride = 0,
   opt_pad,
   opt_method,
+  opt_enable_pool_switches,
   opt_verbose,
   opt_cudnn,
   opt_no_cudnn,
@@ -33,13 +34,14 @@ enum {
 
 /* options */
 vlmxOption  options [] = {
-  {"Stride",           1,   opt_stride            },
-  {"Pad",              1,   opt_pad               },
-  {"Method",           1,   opt_method            },
-  {"Verbose",          0,   opt_verbose           },
-  {"CUDNN",            0,   opt_cudnn             },
-  {"NoCUDNN",          0,   opt_no_cudnn          },
-  {0,                  0,   0                     }
+  {"Stride",             1,   opt_stride              },
+  {"Pad",                1,   opt_pad                 },
+  {"Method",             1,   opt_method              },
+  {"EnablePoolSwitches", 0,   opt_enable_pool_switches},
+  {"Verbose",            0,   opt_verbose             },
+  {"CUDNN",              0,   opt_cudnn               },
+  {"NoCUDNN",            0,   opt_no_cudnn            },
+  {0,                    0,   0                       }
 } ;
 
 /* ---------------------------------------------------------------- */
@@ -66,7 +68,7 @@ enum {
 } ;
 
 enum {
-  OUT_RESULT = 0, OUT_END
+  OUT_RESULT = 0, OUT_POOL_SWITCHES, OUT_END
 } ;
 
 void mexFunction(int nout, mxArray *out[],
@@ -82,6 +84,7 @@ void mexFunction(int nout, mxArray *out[],
   int padBottom = 0 ;
   vl::PoolingMethod method = vl::vlPoolingMax ;
   bool backMode = false ;
+  bool enablePoolSwitches = false;
 
   int verbosity = 0 ;
   int opt ;
@@ -163,6 +166,10 @@ void mexFunction(int nout, mxArray *out[],
           vlmxError(vlmxErrInvalidArgument, "METHOD is not a supported method.") ;
         }
         break;
+
+	  case opt_enable_pool_switches :
+	    enablePoolSwitches = true;
+	    break;
 
       case opt_no_cudnn :
 #if ENABLE_CUDNN
@@ -250,14 +257,16 @@ void mexFunction(int nout, mxArray *out[],
   vl::Device deviceType = data.getDeviceType() ;
   vl::Type dataType = data.getDataType() ;
   vl::MexTensor output(context) ;
+  vl::MexTensor poolSwitches(context) ;
   vl::MexTensor derData(context) ;
-
+  
   if (!backMode) {
     output.initWithZeros(deviceType, dataType, outputShape) ;
+	if(enablePoolSwitches) { poolSwitches.initWithZeros(deviceType, vl::vlTypeInt64, outputShape) ; }
   } else {
     derData.initWithZeros(deviceType, dataType, data.getShape()) ;
   }
-
+  
   if (verbosity > 0) {
     mexPrintf("vl_nnpool: %s; %s", backMode?"backward":"forward", (data.getDeviceType()==vl::GPU) ? "GPU" : "CPU") ;
     if (data.getDeviceType() == vl::GPU) {
@@ -275,11 +284,13 @@ void mexFunction(int nout, mxArray *out[],
     vl::print("vl_nnpool: data: ", data) ;
     mexPrintf("vl_nnpool: pooling: %d x %d\n", poolHeight, poolWidth);
     mexPrintf("vl_nnpool: method: %s\n", (method == vl::vlPoolingMax) ? "max" : "avg") ;
+	mexPrintf("vl_nnpool: enablePoolSwithces: %s\n", (enablePoolSwitches ? "True" : "False" ) );
     if (backMode) {
       vl::print("vl_nnpool: derOutput: ", derOutput) ;
       vl::print("vl_nnpool: derData: ", derData) ;
     } else {
       vl::print("vl_nnpool: output: ", output) ;
+	  vl::print("vl_nnpool: poolSwitches: ", poolSwitches) ;
     }
   }
 
@@ -289,12 +300,23 @@ void mexFunction(int nout, mxArray *out[],
 
   vl::Error error ;
   if (!backMode) {
-    error = vl::nnpooling_forward(context,
-                                  output, data,
+	if (enablePoolSwitches) {
+      error = vl::nnpooling_forward_switches(context,
+                                  output, poolSwitches, data,
                                   method,
                                   poolHeight, poolWidth,
                                   strideY, strideX,
                                   padTop, padBottom, padLeft, padRight) ;
+	}
+	else {
+	  error = vl::nnpooling_forward(context,
+                                  output, data,
+                                  method, 
+                                  poolHeight, poolWidth,
+                                  strideY, strideX,
+                                  padTop, padBottom, padLeft, padRight) ;
+	}
+
   } else {
     error = vl::nnpooling_backward(context,
                                    derData, data, derOutput,
@@ -313,7 +335,9 @@ void mexFunction(int nout, mxArray *out[],
   }
   if (backMode) {
     out[OUT_RESULT] = derData.relinquish() ;
+	
   } else {
     out[OUT_RESULT] = output.relinquish() ;
+	if(enablePoolSwitches) { out[OUT_POOL_SWITCHES] = poolSwitches.relinquish();	}
   }
 }

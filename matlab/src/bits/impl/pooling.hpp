@@ -18,6 +18,20 @@ the terms of the BSD license (see the COPYING file).
 #include <cstddef>
 
 namespace vl { namespace impl {
+  template<vl::Device dev, typename type>
+  struct pooling_max_switches {
+    typedef type data_type ;
+
+    static vl::Error
+    forward(data_type* output,
+			int64_t * poolSwitches,
+            data_type const* data,
+            size_t height, size_t width, size_t depth,
+            size_t poolHeight, size_t poolWidth,
+            size_t strideY, size_t strideX,
+            size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) ;
+
+  } ;
 
   template<vl::Device dev, typename type>
   struct pooling_max {

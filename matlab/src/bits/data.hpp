@@ -16,6 +16,8 @@ the terms of the BSD license (see the COPYING file).
 #include <cstddef>
 #include <string>
 
+typedef long long int64_t;
+
 #define STRINGIZE(x) STRINGIZE_HELPER(x)
 #define STRINGIZE_HELPER(x) #x
 #define FILELINE STRINGIZE(__FILE__) ":" STRINGIZE(__LINE__)
@@ -35,18 +37,21 @@ namespace vl {
   enum Type {
     vlTypeChar,
     vlTypeFloat,
-    vlTypeDouble
+    vlTypeDouble,
+	vlTypeInt64
   } ;
 
   template <vl::Type id> struct DataTypeTraits { } ;
   template <> struct DataTypeTraits<vlTypeChar> { typedef char type ; } ;
   template <> struct DataTypeTraits<vlTypeFloat> { typedef float type ; } ;
   template <> struct DataTypeTraits<vlTypeDouble> { typedef double type ; } ;
+  template <> struct DataTypeTraits<vlTypeInt64> { typedef int64_t type ; } ;
 
   template <typename type> struct BuiltinToDataType {} ;
   template <> struct BuiltinToDataType<char> { enum { dataType = vlTypeChar } ; } ;
   template <> struct BuiltinToDataType<float> { enum { dataType = vlTypeFloat } ; } ;
   template <> struct BuiltinToDataType<double> { enum { dataType = vlTypeDouble } ; } ;
+  template <> struct BuiltinToDataType<int64_t> { enum { dataType = vlTypeInt64 } ; } ;
 
   enum Error {
     vlSuccess = 0,

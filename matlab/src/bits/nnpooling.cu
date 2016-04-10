@@ -25,8 +25,78 @@ the terms of the BSD license (see the COPYING file).
 using namespace vl ;
 
 /* ---------------------------------------------------------------- */
+/*                                       nnpooling_forward_switches */
+/* ---------------------------------------------------------------- */
+
+#define DISPATCH(deviceType, op, type) \
+status = vl::impl::op<deviceType, type>::forward \
+((type*)output.getMemory(), (int64_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
+data.getHeight(), data.getWidth(), data.getDepth() * data.getSize(), \
+poolHeight, poolWidth, \
+strideY, strideX, \
+padTop, padBottom, \
+padLeft, padRight) ;
+
+#define DISPATCH2(deviceType, op) \
+switch (dataType) { \
+case vlTypeFloat : DISPATCH(deviceType, op, float) ; break ; \
+IF_DOUBLE(case vlTypeDouble : DISPATCH(deviceType, op, double) ; break ;) \
+default: assert(false) ; return vlErrorUnknown ; \
+}
+
+#define DISPATCH3(deviceType) \
+switch (method) { \
+case vlPoolingMax : DISPATCH2(deviceType, pooling_max_switches) ; break ; \
+default: assert(false) ; return vlErrorUnknown ; \
+}
+
+
+vl::Error
+vl::nnpooling_forward_switches(vl::Context& context,
+                      vl::Tensor output,
+					  vl::Tensor poolSwitches,
+                      vl::Tensor data,
+                      PoolingMethod method,
+                      int poolHeight, int poolWidth,
+                      int strideY, int strideX,
+                      int padTop, int padBottom,
+                      int padLeft, int padRight)
+{
+  vl::Error status = vlSuccess ;
+  vl::Device deviceType = output.getDeviceType() ;
+  vl::Type dataType = output.getDataType() ;
+
+  switch (deviceType) {
+    default:
+      assert(false) ;
+      return vl::vlErrorUnknown ;
+
+    case vl::CPU:
+      DISPATCH3(vl::CPU) ;
+      break ;
+
+#ifdef ENABLE_GPU
+    case vl::GPU:
+      DISPATCH3(GPU) ;
+      if (status == vlErrorCuda) {
+        context.setError(context.getCudaHelper().catchCudaError(__func__)) ;
+      }
+      break ;
+#endif
+  }
+  return context.passError(status, "nnpooling_forward_switches") ;
+}
+
+
+
+/* ---------------------------------------------------------------- */
 /*                                                nnpooling_forward */
 /* ---------------------------------------------------------------- */
+
+
+#undef DISPATCH
+#undef DISPATCH2
+#undef DISPATCH3
 
 #define DISPATCH(deviceType, op, type) \
 status = vl::impl::op<deviceType, type>::forward \
