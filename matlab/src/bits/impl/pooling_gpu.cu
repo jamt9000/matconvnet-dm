@@ -18,6 +18,59 @@ the terms of the BSD license (see the COPYING file).
 #include <sm_20_atomic_functions.h>
 
 /* ---------------------------------------------------------------- */
+/*                                     pooling_max_switches_forward */
+/* ---------------------------------------------------------------- */
+
+template<typename T> __global__ void
+pooling_max_switches_kernel
+(T* pooled,
+ int64_t* poolSwitches,
+ const T* data,
+ const int pooledWidth,
+ const int pooledHeight,
+ const int pooledVolume,
+ const int width,
+ const int height,
+ const int poolWidth,
+ const int poolHeight,
+ const int strideX,
+ const int strideY,
+ const int padLeft,
+ const int padTop)
+{
+  int pooledIndex = threadIdx.x + blockIdx.x * blockDim.x;
+  if (pooledIndex < pooledVolume) {
+    int px = pooledIndex ;
+    int py = px / pooledWidth ;
+    int pz = py / pooledHeight ;
+    px %= pooledWidth ;
+    py %= pooledHeight ;
+    data += pz * (width*height) ;
+
+    int x1 = px * strideX - padLeft ;
+    int y1 = py * strideY - padTop ;
+    int x2 = min(x1 + poolWidth, width) ;
+    int y2 = min(y1 + poolHeight, height) ;
+    x1 = max(x1, 0) ;
+    y1 = max(y1, 0) ;
+
+    T bestValue = data[y1 * width + x1] ;
+	int64_t switchLocation = (pz * height + y1) * width + (x1 + 1) ;
+
+    for (int y = y1 ; y < y2 ; ++y) {
+      for (int x = x1 ; x < x2 ; ++x) {
+        if(bestValue > data[y * width + x]) {
+		  bestValue = data[y * width + x] ;
+		  switchLocation = (pz * height + y) * width + (x+1) ;
+		}
+      }
+    }
+    pooled[pooledIndex] = bestValue ;
+	poolSwitches[pooledIndex] = switchLocation;
+  }
+}
+
+/* ---------------------------------------------------------------- */
 /*                                              pooling_max_forward */
 /* ---------------------------------------------------------------- */
 
@@ -289,6 +342,40 @@ pooling_average_backward_kernel(T* derData,
 /* ---------------------------------------------------------------- */
 
 namespace vl { namespace impl {
+  
+  template <typename type>
+  struct pooling_max_switches<vl::GPU, type>
+  {
+    static vl::Error
+    forward(type* pooled,
+	        int64_t* poolSwitches,
+            type const* data,
+            size_t height, size_t width, size_t depth,
+            size_t poolHeight, size_t poolWidth,
+            size_t strideY, size_t strideX,
+            size_t padTop, size_t padBottom,
+            size_t padLeft, size_t padRight)
+    {
+      int pooledWidth = (width + (padLeft+padRight) - poolWidth)/strideX + 1 ;
+      int pooledHeight = (height + (padTop+padBottom) - poolHeight)/strideY + 1 ;
+      int pooledVolume = pooledWidth * pooledHeight * depth ;
+
+      pooling_max_switches_kernel<type>
+      <<< divideUpwards(pooledVolume, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
+      (pooled, poolSwitches, data,
+       pooledHeight, pooledWidth, pooledVolume,
+       height, width,
+       poolHeight, poolWidth,
+       strideY, strideX,
+       padTop, padLeft);
+
+      cudaError_t status = cudaPeekAtLastError() ;
+      return (status == cudaSuccess) ? vl::vlSuccess : vl::vlErrorCuda ;
+    }
+
+  } ; // pooling_max_switches
+
+
 
   template <typename type>
   struct pooling_max<vl::GPU, type>
@@ -408,10 +495,12 @@ namespace vl { namespace impl {
 
 // Instantiations
 template struct vl::impl::pooling_max<vl::GPU, float> ;
+template struct vl::impl::pooling_max_switches<vl::GPU, float> ;
 template struct vl::impl::pooling_average<vl::GPU, float> ;
 
 #ifdef ENABLE_DOUBLE
 template struct vl::impl::pooling_max<vl::GPU, double> ;
+template struct vl::impl::pooling_max_switches<vl::GPU, double> ;
 template struct vl::impl::pooling_average<vl::GPU, double> ;
 #endif
 
