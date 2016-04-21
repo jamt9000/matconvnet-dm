@@ -30,6 +30,17 @@ namespace vl {
                     int strideY, int strideX,
                     int padTop, int padBottom,
                     int padLeft, int padRight) ;
+  vl::Error
+  nnpooling_backward_switches(vl::Context& context,
+                     vl::Tensor derData,
+                     vl::Tensor poolSwitches,
+                     vl::Tensor data,
+                     vl::Tensor derOutput,
+                     PoolingMethod method,
+                     int poolHeight, int poolWidth,
+                     int strideY, int strideX,
+                     int padTop, int padBottom,
+                     int padLeft, int padRight) ;
 
   vl::Error
   nnpooling_forward(vl::Context& context,

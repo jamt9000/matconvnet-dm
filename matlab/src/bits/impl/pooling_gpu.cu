@@ -385,6 +385,60 @@ unpooling_max_forward
 }
 
 /* ---------------------------------------------------------------- */
+/*                                         unpooling_max_backward   */
+/* ---------------------------------------------------------------- */
+
+template <typename T> __global__ void
+unpooling_max_backward
+(T* derData,
+ const T* data,
+ const int64_t* poolSwitches,
+ const T* derUnpooled,
+ const int nthreads,
+ const int pooledWidth,
+ const int pooledHeight,
+ const int width,
+ const int height,
+ const int depth,
+ const int poolWidth,
+ const int poolHeight,
+ const int strideX,
+ const int strideY)
+{
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < nthreads) {
+    int x = index % width;
+    int y = (index / width) % height;
+    int z = (index / width / height) % depth;
+    int py1 = (y < poolHeight) ? 0 : (y - poolHeight) / strideY + 1;
+    int py2 = min(y / strideY + 1, pooledHeight);
+    int px1 = (x < poolWidth) ? 0 : (x - poolWidth) / strideX + 1;
+    int px2 = min(x / strideX + 1, pooledWidth);
+    T unpoolValue = (T)(-CUDART_INF_F);
+    T derValue;
+    poolSwitches += z * pooledHeight * pooledWidth ;
+    derData += z * pooledHeight * pooledWidth ;
+    data += z * pooledHeight * pooledWidth ;
+    int derDataIndex = -1 ;
+    for (int py = py1; py < py2; ++py) {
+      for (int px = px1; px < px2; ++px) {
+        int64_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
+        if (maxIndex == index) {
+          if (data[py * pooledWidth + px] > unpoolValue) {
+            unpoolValue = data[py * pooledWidth + px];
+            derDataIndex = py * pooledWidth + px;
+            derValue = derUnpooled[index];
+          }
+        }
+      }
+    }
+    if (derDataIndex != -1) {
+      derData[derDataIndex] = derValue;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- */
 /*                                                        Interface */
 /* ---------------------------------------------------------------- */
 
@@ -395,7 +449,7 @@ namespace vl { namespace impl {
   {
     static vl::Error
     forward(type* pooled,
-	        int64_t* poolSwitches,
+            int64_t* poolSwitches,
             type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -557,6 +611,31 @@ namespace vl { namespace impl {
       unpooling_max_forward<type>
       <<< divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
       (unpooled, data, poolSwitches,
+       nthreads,
+       pooledHeight, pooledWidth,
+       height, width, depth,
+       poolHeight, poolWidth, strideY, strideX);
+
+      cudaError_t status = cudaPeekAtLastError() ;
+      return (status == cudaSuccess) ? vl::vlSuccess : vl::vlErrorCuda ;
+    }
+
+    static vl::Error
+    backward(type* derData,
+             int64_t* poolSwitches,
+             type const* data,
+             type const* derOutput,
+             size_t height, size_t width, size_t depth,
+             size_t poolHeight, size_t poolWidth,
+             size_t strideY, size_t strideX,
+             size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) {
+      int pooledWidth = (width + (padLeft+padRight) - poolWidth)/strideX + 1 ;
+      int pooledHeight = (height + (padTop+padBottom) - poolHeight)/strideY + 1 ;
+      int nthreads = width * height * depth ;
+
+      unpooling_max_backward<type>
+      <<< divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
+      (derData, data, poolSwitches, derOutput,
        nthreads,
        pooledHeight, pooledWidth,
        height, width, depth,

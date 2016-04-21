@@ -249,13 +249,16 @@ void mexFunction(int nout, mxArray *out[],
   if (method != vl::vlUnpoolingMax) {
     prePoolHeight = data.getHeight() ;
     prePoolWidth = data.getWidth() ;
+  } else if (backMode) {
+    prePoolHeight = derOutput.getHeight() ;
+    prePoolWidth = derOutput.getWidth() ;
   }
 
   if (method == vl::vlUnpoolingMax && poolSwitchesIn == NULL) {
     mexErrMsgTxt("Unpooling requires switches") ;
   }
 
-  if (method == vl::vlUnpoolingMax && (prePoolWidth <= 0 || prePoolHeight <= 0)) {
+  if (method == vl::vlUnpoolingMax && (prePoolWidth <= 0 || prePoolHeight <= 0) && !backMode) {
     mexErrMsgTxt("Unpooling requires UnpoolOutputSize") ;
   }
 
@@ -371,12 +374,21 @@ void mexFunction(int nout, mxArray *out[],
     }
 
   } else {
-    error = vl::nnpooling_backward(context,
-                                   derData, data, derOutput,
+    if (method == vl::vlUnpoolingMax) {
+      error = vl::nnpooling_backward_switches(context,
+                                   derData, poolSwitches, data, derOutput,
                                    method,
                                    poolHeight, poolWidth,
                                    strideY, strideX,
                                    padTop, padBottom, padLeft, padRight) ;
+    } else {
+      error = vl::nnpooling_backward(context,
+                                     derData, data, derOutput,
+                                     method,
+                                     poolHeight, poolWidth,
+                                     strideY, strideX,
+                                     padTop, padBottom, padLeft, padRight) ;
+    }
   }
 
   /* -------------------------------------------------------------- */

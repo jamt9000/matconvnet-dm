@@ -55,7 +55,7 @@ default: assert(false) ; return vlErrorUnknown ; \
 vl::Error
 vl::nnpooling_forward_switches(vl::Context& context,
                       vl::Tensor output,
-					            vl::Tensor poolSwitches,
+                      vl::Tensor poolSwitches,
                       vl::Tensor data,
                       PoolingMethod method,
                       int poolHeight, int poolWidth,
@@ -99,7 +99,85 @@ vl::nnpooling_forward_switches(vl::Context& context,
   return context.passError(status, "nnpooling_forward_switches") ;
 }
 
+/* ---------------------------------------------------------------- */
+/*                                      nnpooling_backward_switches */
+/* ---------------------------------------------------------------- */
 
+#undef DISPATCH
+#undef DISPATCH2
+#undef DISPATCH3
+
+#define DISPATCH(deviceType, op, type) \
+status = vl::impl::op<deviceType, type>::backward \
+((type*)derData.getMemory(), (int64_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
+(type const*)derOutput.getMemory(), \
+height, width, data.getDepth() * data.getSize(), \
+poolHeight, poolWidth, \
+strideY, strideX, \
+padTop, padBottom, \
+padLeft, padRight) ;
+
+#define DISPATCH2(deviceType, op) \
+switch (dataType) { \
+case vlTypeFloat : DISPATCH(deviceType, op, float) ; break ; \
+IF_DOUBLE(case vlTypeDouble : DISPATCH(deviceType, op, double) ; break ;) \
+default: assert(false) ; return vlErrorUnknown ; \
+}
+
+#define DISPATCH3(deviceType) \
+switch (method) { \
+case vlUnpoolingMax : DISPATCH2(deviceType, unpooling_max) ; break ; \
+default: assert(false) ; return vlErrorUnknown ; \
+}
+
+
+vl::Error
+vl::nnpooling_backward_switches(Context& context,
+                                Tensor derData,
+                                Tensor poolSwitches,
+                                Tensor data,
+                                Tensor derOutput,
+                                PoolingMethod method,
+                                int poolHeight, int poolWidth,
+                                int strideY, int strideX,
+                                int padTop, int padBottom,
+                                int padLeft, int padRight)
+{
+  vl::Error status = vlSuccess ;
+  vl::Device deviceType = derOutput.getDeviceType() ;
+  vl::Type dataType = derOutput.getDataType() ;
+
+  int height ;
+  int width ;
+
+  if (method == vl::vlUnpoolingMax) {
+    height = derOutput.getHeight() ;
+    width = derOutput.getWidth() ;
+  } else {
+    height = data.getHeight() ;
+    width = data.getWidth() ;
+  }
+
+  switch (deviceType) {
+    default:
+      assert(false) ;
+      return vl::vlErrorUnknown ;
+
+    case vl::CPU:
+      DISPATCH3(vl::CPU) ;
+      break ;
+
+#ifdef ENABLE_GPU
+    case vl::GPU:
+      DISPATCH3(GPU) ;
+      if (status == vlErrorCuda) {
+        context.setError(context.getCudaHelper().catchCudaError(__func__)) ;
+      }
+      break ;
+#endif
+  }
+  return context.passError(status, "nnpooling_backward_switches") ;
+}
 
 /* ---------------------------------------------------------------- */
 /*                                                nnpooling_forward */

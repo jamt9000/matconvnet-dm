@@ -88,6 +88,16 @@ namespace vl { namespace impl {
             size_t poolHeight, size_t poolWidth,
             size_t strideY, size_t strideX,
             size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) ;
+
+    static vl::Error
+    backward(data_type* derData,
+             int64_t* poolSwitches,
+             data_type const* data,
+             data_type const* derOutput,
+             size_t height, size_t width, size_t depth,
+             size_t poolHeight, size_t poolWidth,
+             size_t strideY, size_t strideX,
+             size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) ;
   } ;
 
 } }

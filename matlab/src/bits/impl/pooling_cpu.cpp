@@ -405,6 +405,18 @@ namespace vl { namespace impl {
     {
       return vl::vlErrorUnsupported ; // Not implemented
     }
+
+    static vl::Error
+    backward(type* derData,
+             int64_t* poolSwitches,
+             type const* data,
+             type const* derOutput,
+             size_t height, size_t width, size_t depth,
+             size_t poolHeight, size_t poolWidth,
+             size_t strideY, size_t strideX,
+             size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) {
+      return vl::vlErrorUnsupported ;
+    }
   } ; // unpooling_max
 
 } } ; // namespace vl::impl
