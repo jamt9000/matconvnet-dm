@@ -59,14 +59,14 @@ pooling_max_switches_kernel
 
     for (int y = y1 ; y < y2 ; ++y) {
       for (int x = x1 ; x < x2 ; ++x) {
-        if(bestValue > data[y * width + x]) {
-		  bestValue = data[y * width + x] ;
-		  switchLocation = (pz * height + y) * width + (x+1) ;
-		}
+        if(bestValue < data[y * width + x]) {
+          bestValue = data[y * width + x] ;
+          switchLocation = (pz * height + y) * width + (x+1) ;
+        }
       }
     }
     pooled[pooledIndex] = bestValue ;
-	poolSwitches[pooledIndex] = switchLocation;
+    poolSwitches[pooledIndex] = switchLocation;
   }
 }
 
