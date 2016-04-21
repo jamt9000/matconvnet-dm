@@ -31,7 +31,7 @@ using namespace vl ;
 #define DISPATCH(deviceType, op, type) \
 status = vl::impl::op<deviceType, type>::forward \
 ((type*)output.getMemory(), (int64_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
-data.getHeight(), data.getWidth(), data.getDepth() * data.getSize(), \
+height, width, data.getDepth() * data.getSize(), \
 poolHeight, poolWidth, \
 strideY, strideX, \
 padTop, padBottom, \
@@ -47,6 +47,7 @@ default: assert(false) ; return vlErrorUnknown ; \
 #define DISPATCH3(deviceType) \
 switch (method) { \
 case vlPoolingMax : DISPATCH2(deviceType, pooling_max_switches) ; break ; \
+case vlUnpoolingMax : DISPATCH2(deviceType, unpooling_max) ; break ; \
 default: assert(false) ; return vlErrorUnknown ; \
 }
 
@@ -54,7 +55,7 @@ default: assert(false) ; return vlErrorUnknown ; \
 vl::Error
 vl::nnpooling_forward_switches(vl::Context& context,
                       vl::Tensor output,
-					  vl::Tensor poolSwitches,
+					            vl::Tensor poolSwitches,
                       vl::Tensor data,
                       PoolingMethod method,
                       int poolHeight, int poolWidth,
@@ -65,6 +66,17 @@ vl::nnpooling_forward_switches(vl::Context& context,
   vl::Error status = vlSuccess ;
   vl::Device deviceType = output.getDeviceType() ;
   vl::Type dataType = output.getDataType() ;
+
+  int height ;
+  int width ;
+
+  if (method == vl::vlUnpoolingMax) {
+    height = output.getHeight() ;
+    width = output.getWidth() ;
+  } else {
+    height = data.getHeight() ;
+    width = data.getWidth() ;
+  }
 
   switch (deviceType) {
     default:

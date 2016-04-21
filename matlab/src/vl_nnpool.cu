@@ -27,6 +27,8 @@ enum {
   opt_pad,
   opt_method,
   opt_enable_pool_switches,
+  opt_pool_switches,
+  opt_unpool_output_size,
   opt_verbose,
   opt_cudnn,
   opt_no_cudnn,
@@ -38,6 +40,8 @@ vlmxOption  options [] = {
   {"Pad",                1,   opt_pad                 },
   {"Method",             1,   opt_method              },
   {"EnablePoolSwitches", 0,   opt_enable_pool_switches},
+  {"PoolSwitches",       1,   opt_pool_switches       },
+  {"UnpoolOutputSize",   1,   opt_unpool_output_size  },
   {"Verbose",            0,   opt_verbose             },
   {"CUDNN",              0,   opt_cudnn               },
   {"NoCUDNN",            0,   opt_no_cudnn            },
@@ -85,6 +89,9 @@ void mexFunction(int nout, mxArray *out[],
   vl::PoolingMethod method = vl::vlPoolingMax ;
   bool backMode = false ;
   bool enablePoolSwitches = false;
+  mxArray const *poolSwitchesIn = NULL ;
+  int prePoolHeight = 0;
+  int prePoolWidth = 0;
 
   int verbosity = 0 ;
   int opt ;
@@ -162,14 +169,32 @@ void mexFunction(int nout, mxArray *out[],
           method = vl::vlPoolingMax ;
         } else if (vlmxIsEqualToStringI(optarg, "avg")) {
           method = vl::vlPoolingAverage ;
+        } else if (vlmxIsEqualToStringI(optarg, "maxunpool")) {
+          method = vl::vlUnpoolingMax ;
         } else {
           vlmxError(vlmxErrInvalidArgument, "METHOD is not a supported method.") ;
         }
+        break ;
+
+      case opt_enable_pool_switches :
+        enablePoolSwitches = true;
         break;
 
-	  case opt_enable_pool_switches :
-	    enablePoolSwitches = true;
-	    break;
+      case opt_pool_switches :
+        poolSwitchesIn = optarg ;
+        break ;
+
+      case opt_unpool_output_size :
+        if (!vlmxIsPlainMatrix(optarg,-1,-1)) {
+          mexErrMsgTxt("UNPOOLOUTPUTSIZE is not a plain matrix.") ;
+        }
+        if (mxGetNumberOfElements(optarg) >= 2) {
+            prePoolHeight = (int)mxGetPr(optarg)[0] ;
+            prePoolWidth = (int)mxGetPr(optarg)[1] ;
+        } else {
+            mexErrMsgTxt("UNPOOLOUTPUTSIZE has less than 2 elements") ;
+        }
+        break ;
 
       case opt_no_cudnn :
 #if ENABLE_CUDNN
@@ -193,6 +218,7 @@ void mexFunction(int nout, mxArray *out[],
 
   data.init(in[IN_DATA]) ;
   data.reshape(4) ; // -> 4 dimensions
+
 
   if (backMode) {
     derOutput.init(in[IN_DEROUTPUT]) ;
@@ -219,6 +245,20 @@ void mexFunction(int nout, mxArray *out[],
       mexErrMsgTxt("SIZE has neither one nor two elements.") ;
   }
 
+  // The input dims for pooling, the output dims for unpooling
+  if (method != vl::vlUnpoolingMax) {
+    prePoolHeight = data.getHeight() ;
+    prePoolWidth = data.getWidth() ;
+  }
+
+  if (method == vl::vlUnpoolingMax && poolSwitchesIn == NULL) {
+    mexErrMsgTxt("Unpooling requires switches") ;
+  }
+
+  if (method == vl::vlUnpoolingMax && (prePoolWidth <= 0 || prePoolHeight <= 0)) {
+    mexErrMsgTxt("Unpooling requires UnpoolOutputSize") ;
+  }
+
   /* Basic compatibility of Shape */
   if (strideX < 1 || strideY < 1) {
     mexErrMsgTxt("At least one element of STRIDE is smaller than one.") ;
@@ -226,8 +266,8 @@ void mexFunction(int nout, mxArray *out[],
   if (poolHeight == 0 || poolWidth == 0) {
     mexErrMsgTxt("A dimension of the pooling SIZE is void.") ;
   }
-  if (data.getHeight() + (padTop+padBottom) < poolHeight ||
-      data.getWidth() + (padLeft+padRight) < poolWidth) {
+  if (prePoolHeight + (padTop+padBottom) < poolHeight ||
+      prePoolWidth + (padLeft+padRight) < poolWidth) {
     mexErrMsgTxt("The pooling window is larger than the DATA (including padding).") ;
   }
   if (padLeft < 0 ||
@@ -249,6 +289,15 @@ void mexFunction(int nout, mxArray *out[],
                               data.getDepth(),
                               data.getSize()) ;
 
+  if (method == vl::vlUnpoolingMax) {
+    outputShape = vl::TensorShape(prePoolHeight,
+                                  prePoolWidth,
+                                  data.getDepth(),
+                                  data.getSize()) ;
+  }
+
+
+
   if (backMode && (derOutput != outputShape)) {
     mexErrMsgTxt("DEROUTPUT dimensions are incompatible with X and POOL.") ;
   }
@@ -259,10 +308,14 @@ void mexFunction(int nout, mxArray *out[],
   vl::MexTensor output(context) ;
   vl::MexTensor poolSwitches(context) ;
   vl::MexTensor derData(context) ;
+
+  if (poolSwitchesIn != NULL) {
+    poolSwitches.init(poolSwitchesIn) ;
+  }
   
   if (!backMode) {
     output.initWithZeros(deviceType, dataType, outputShape) ;
-	if(enablePoolSwitches) { poolSwitches.initWithZeros(deviceType, vl::vlTypeInt64, outputShape) ; }
+    if(enablePoolSwitches) { poolSwitches.initWithZeros(deviceType, vl::vlTypeInt64, outputShape) ; }
   } else {
     derData.initWithZeros(deviceType, dataType, data.getShape()) ;
   }
@@ -284,13 +337,13 @@ void mexFunction(int nout, mxArray *out[],
     vl::print("vl_nnpool: data: ", data) ;
     mexPrintf("vl_nnpool: pooling: %d x %d\n", poolHeight, poolWidth);
     mexPrintf("vl_nnpool: method: %s\n", (method == vl::vlPoolingMax) ? "max" : "avg") ;
-	mexPrintf("vl_nnpool: enablePoolSwithces: %s\n", (enablePoolSwitches ? "True" : "False" ) );
+    mexPrintf("vl_nnpool: enablePoolSwitches: %s\n", (enablePoolSwitches ? "True" : "False" ) );
     if (backMode) {
       vl::print("vl_nnpool: derOutput: ", derOutput) ;
       vl::print("vl_nnpool: derData: ", derData) ;
     } else {
       vl::print("vl_nnpool: output: ", output) ;
-	  vl::print("vl_nnpool: poolSwitches: ", poolSwitches) ;
+      vl::print("vl_nnpool: poolSwitches: ", poolSwitches) ;
     }
   }
 
@@ -300,22 +353,22 @@ void mexFunction(int nout, mxArray *out[],
 
   vl::Error error ;
   if (!backMode) {
-	if (enablePoolSwitches) {
+    if (enablePoolSwitches || method == vl::vlUnpoolingMax) {
       error = vl::nnpooling_forward_switches(context,
                                   output, poolSwitches, data,
                                   method,
                                   poolHeight, poolWidth,
                                   strideY, strideX,
                                   padTop, padBottom, padLeft, padRight) ;
-	}
-	else {
-	  error = vl::nnpooling_forward(context,
+    }
+    else {
+      error = vl::nnpooling_forward(context,
                                   output, data,
                                   method, 
                                   poolHeight, poolWidth,
                                   strideY, strideX,
                                   padTop, padBottom, padLeft, padRight) ;
-	}
+    }
 
   } else {
     error = vl::nnpooling_backward(context,

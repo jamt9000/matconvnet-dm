@@ -18,12 +18,12 @@ the terms of the BSD license (see the COPYING file).
 
 namespace vl {
 
-  enum PoolingMethod { vlPoolingMax, vlPoolingAverage } ;
+  enum PoolingMethod { vlPoolingMax, vlPoolingAverage, vlUnpoolingMax } ;
 
   vl::Error
   nnpooling_forward_switches(vl::Context& context,
                     vl::Tensor output,
-					vl::Tensor poolSwitches,
+                    vl::Tensor poolSwitches,
                     vl::Tensor data,
                     PoolingMethod method,
                     int poolHeight, int poolWidth,

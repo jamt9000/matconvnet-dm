@@ -76,6 +76,20 @@ namespace vl { namespace impl {
              size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) ;
   } ;
 
+  template <vl::Device dev, typename type>
+  struct unpooling_max {
+    typedef type data_type ;
+
+    static vl::Error
+    forward(data_type* unpooled,
+            int64_t* poolSwitches,
+            data_type const* data,
+            size_t height, size_t width, size_t depth,
+            size_t poolHeight, size_t poolWidth,
+            size_t strideY, size_t strideX,
+            size_t padTop, size_t padBottom, size_t padLeft, size_t padRight) ;
+  } ;
+
 } }
 
 #endif /* defined(VL_POOLING_H) */

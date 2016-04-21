@@ -390,16 +390,35 @@ namespace vl { namespace impl {
     }
   } ; // pooling_average
 
+    template <typename type>
+  struct unpooling_max<vl::CPU, type>
+  {
+
+    static vl::Error
+    forward(type* unpooled,
+            int64_t* poolSwitches,
+            type const* data,
+            size_t height, size_t width, size_t depth,
+            size_t poolHeight, size_t poolWidth,
+            size_t strideY, size_t strideX,
+            size_t padTop, size_t padBottom, size_t padLeft, size_t padRight)
+    {
+      return vl::vlErrorUnsupported ; // Not implemented
+    }
+  } ; // unpooling_max
+
 } } ; // namespace vl::impl
 
 // Instantiations
 template struct vl::impl::pooling_max<vl::CPU, float> ;
 template struct vl::impl::pooling_max_switches<vl::CPU, float> ;
 template struct vl::impl::pooling_average<vl::CPU, float> ;
+template struct vl::impl::unpooling_max<vl::CPU, float> ;
 
 #ifdef ENABLE_DOUBLE
 template struct vl::impl::pooling_max<vl::CPU, double> ;
 template struct vl::impl::pooling_max_switches<vl::CPU, double> ;
 template struct vl::impl::pooling_average<vl::CPU, double> ;
+template struct vl::impl::unpooling_max<vl::CPU, double> ;
 #endif
 

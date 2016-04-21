@@ -15,8 +15,7 @@ the terms of the BSD license (see the COPYING file).
 
 #include <cstddef>
 #include <string>
-
-typedef long long int64_t;
+#include <stdint.h>
 
 #define STRINGIZE(x) STRINGIZE_HELPER(x)
 #define STRINGIZE_HELPER(x) #x
