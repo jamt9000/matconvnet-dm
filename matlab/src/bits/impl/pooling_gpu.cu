@@ -341,7 +341,6 @@ pooling_average_backward_kernel(T* derData,
 /* ---------------------------------------------------------------- */
 /*                                         unpooling_max_forward */
 /* ---------------------------------------------------------------- */
-
 template <typename T> __global__ void
 unpooling_max_forward
 (T* unpooled,
@@ -356,22 +355,29 @@ unpooling_max_forward
  const int poolWidth,
  const int poolHeight,
  const int strideX,
- const int strideY)
+ const int strideY,
+ const int padLeft,
+ const int padTop)
 {
   int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < nthreads) {
-    int x = index % width;
-    int y = (index / width) % height;
-    int z = (index / width / height) % depth;
-    int py1 = (y < poolHeight) ? 0 : (y - poolHeight) / strideY + 1;
-    int py2 = min(y / strideY + 1, pooledHeight);
-    int px1 = (x < poolWidth) ? 0 : (x - poolWidth) / strideX + 1;
-    int px2 = min(x / strideX + 1, pooledWidth);
+    int x_data = index ;
+    int y_data = x_data / width ;
+    int z = y_data / height ;
+    x_data %= width ;
+    y_data %= height ;
+
+    int dx = x_data + padLeft - poolWidth ;
+    int dy = y_data + padTop - poolHeight ;
+    int px1 = (dx >= 0) ? dx/strideX + 1 : 0 ;
+    int py1 = (dy >= 0) ? dy/strideY + 1 : 0 ;
+    int px2 = min((x_data + padLeft) / strideX, pooledWidth - 1) ;
+    int py2 = min((y_data + padTop) / strideY, pooledHeight - 1) ;
     T unpoolValue = (T)(-CUDART_INF_F);
     poolSwitches += z * pooledHeight * pooledWidth ;
     data += z * pooledHeight * pooledWidth ;
-    for (int py = py1; py < py2; ++py) {
-      for (int px = px1; px < px2; ++px) {
+    for (int py = py1; py <= py2; ++py) {
+      for (int px = px1; px <= px2; ++px) {
         int64_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
         if (maxIndex == index) {
           if (data[py * pooledWidth + px] > unpoolValue) {
@@ -403,25 +409,32 @@ unpooling_max_backward
  const int poolWidth,
  const int poolHeight,
  const int strideX,
- const int strideY)
+ const int strideY,
+ const int padLeft,
+ const int padTop)
 {
   int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < nthreads) {
-    int x = index % width;
-    int y = (index / width) % height;
-    int z = (index / width / height) % depth;
-    int py1 = (y < poolHeight) ? 0 : (y - poolHeight) / strideY + 1;
-    int py2 = min(y / strideY + 1, pooledHeight);
-    int px1 = (x < poolWidth) ? 0 : (x - poolWidth) / strideX + 1;
-    int px2 = min(x / strideX + 1, pooledWidth);
+    int x_data = index ;
+    int y_data = x_data / width ;
+    int z = y_data / height ;
+    x_data %= width ;
+    y_data %= height ;
+
+    int dx = x_data + padLeft - poolWidth ;
+    int dy = y_data + padTop - poolHeight ;
+    int px1 = (dx >= 0) ? dx/strideX + 1 : 0 ;
+    int py1 = (dy >= 0) ? dy/strideY + 1 : 0 ;
+    int px2 = min((x_data + padLeft) / strideX, pooledWidth - 1) ;
+    int py2 = min((y_data + padTop) / strideY, pooledHeight - 1) ;
     T unpoolValue = (T)(-CUDART_INF_F);
     T derValue;
     poolSwitches += z * pooledHeight * pooledWidth ;
     derData += z * pooledHeight * pooledWidth ;
     data += z * pooledHeight * pooledWidth ;
     int derDataIndex = -1 ;
-    for (int py = py1; py < py2; ++py) {
-      for (int px = px1; px < px2; ++px) {
+    for (int py = py1; py <= py2; ++py) {
+      for (int px = px1; px <= px2; ++px) {
         int64_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
         if (maxIndex == index) {
           if (data[py * pooledWidth + px] > unpoolValue) {
@@ -614,7 +627,7 @@ namespace vl { namespace impl {
        nthreads,
        pooledHeight, pooledWidth,
        height, width, depth,
-       poolHeight, poolWidth, strideY, strideX);
+       poolHeight, poolWidth, strideY, strideX, padTop, padLeft);
 
       cudaError_t status = cudaPeekAtLastError() ;
       return (status == cudaSuccess) ? vl::vlSuccess : vl::vlErrorCuda ;
@@ -639,7 +652,7 @@ namespace vl { namespace impl {
        nthreads,
        pooledHeight, pooledWidth,
        height, width, depth,
-       poolHeight, poolWidth, strideY, strideX);
+       poolHeight, poolWidth, strideY, strideX, padTop, padLeft);
 
       cudaError_t status = cudaPeekAtLastError() ;
       return (status == cudaSuccess) ? vl::vlSuccess : vl::vlErrorCuda ;
