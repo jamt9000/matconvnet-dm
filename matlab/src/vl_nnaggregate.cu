@@ -58,24 +58,6 @@ aggregate_kernel
   }
 }
 
-// an implementation of atomicAdd() for double (really slow)
-__device__ double myAtomicAdd(double* address, double val)
-{
-  unsigned long long int* address_as_ull = (unsigned long long int*)address;
-  unsigned long long int old = *address_as_ull, assumed;
-  do {
-    assumed = old;
-    old = atomicCAS(address_as_ull, assumed,
-                    __double_as_longlong(val +
-                                         __longlong_as_double(assumed)));
-  } while (assumed != old);
-  return __longlong_as_double(old);
-}
-
-__device__ float myAtomicAdd(float* address, float val) {
-  return atomicAdd(address, val);
-}
-
 template<typename T> __global__ void
 aggregate_kernel_back
 (T* out,
@@ -95,29 +77,25 @@ aggregate_kernel_back
   if (index < nthreads) {
     int h = index % height ;
     int w = (index / height) % width ;
-    int gh = (index / height / width) % outGridHeight ;
-    int gw = (index / height / width / outGridHeight) % outGridWidth ;
+    int gh_in = (index / height / width) % inGridHeight ;
+    int gw_in = (index / height / width / inGridHeight) % inGridWidth ;
 
-    int summed = 0 ;
-    // todo calculate summed nicely
     for (int dw = 0; dw <= 1; ++dw) {
       for (int dh = 0; dh <= 1; ++dh) {
-        int gh_in = gh + delta * dh - pad ;
-        int gw_in = gw + delta * dw - pad ;
-        if (gh_in >= 0 && gh_in < inGridHeight && gw_in >= 0 && gw_in < inGridWidth) {
-          summed++ ;
-        }
-      }
-    }
-    T fac = ((T)1)/summed ;
-    // Not nice, can probably rewrite kernel to avoid atomicAdd
-    for (int dw = 0; dw <= 1; ++dw) {
-      for (int dh = 0; dh <= 1; ++dh) {
-        int gh_in = gh + delta * dh - pad ;
-        int gw_in = gw + delta * dw - pad ;
-        if (gh_in >= 0 && gh_in < inGridHeight && gw_in >= 0 && gw_in < inGridWidth) {
-          myAtomicAdd(out + (h + width * w + width * height * gh_in
-              + width * height * inGridHeight * gw_in), fac * derOutput[index]);
+        int gh_out = gh_in - delta * dh + pad ;
+        int gw_out = gw_in - delta * dw + pad ;
+        if (gh_out >= 0 && gh_out < outGridHeight && gw_out >= 0 && gw_out < outGridWidth) {
+          int summed = ((gh_out + delta - pad) >= 0 && (gh_out + delta - pad) < inGridHeight
+                          && (gw_out + delta - pad) >= 0 && (gw_out + delta - pad) < inGridWidth)
+                        + ((gh_out - pad) >= 0 && (gh_out - pad) < inGridHeight
+                          && (gw_out - pad) >= 0 && (gw_out - pad) < inGridWidth)
+                        + ((gh_out - pad) >= 0 && (gh_out - pad) < inGridHeight
+                          && (gw_out + delta - pad) >= 0 && (gw_out + delta - pad) < inGridWidth)
+                        + ((gh_out + delta - pad) >= 0 && (gh_out + delta - pad) < inGridHeight
+                          && (gw_out - pad) >= 0 && (gw_out - pad) < inGridWidth);
+
+          out[index] += derOutput[h + width * w + width * height * gh_out
+                                  + width * height * outGridHeight * gw_out]/summed;
         }
       }
     }
@@ -254,6 +232,10 @@ void mexFunction(int nout, mxArray *out[],
   vl::Type dataType = data.getDataType() ;
   vl::MexTensor output(context) ;
   vl::MexTensor derData(context) ;
+
+  if (deviceType != vl::GPU) {
+    mexErrMsgTxt("Only GPU supported") ;
+  }
   
   if (!backMode) {
     output.initWithZeros(deviceType, dataType, outputShape) ;
@@ -283,7 +265,7 @@ void mexFunction(int nout, mxArray *out[],
     }
 
   } else {
-    const int nthreads = derOutput.getHeight() * derOutput.getWidth() * derOutput.getDepth() * derOutput.getSize() ;
+    const int nthreads = derData.getHeight() * derData.getWidth() * derData.getDepth() * derData.getSize() ;
     if (dataType == vl::vlTypeFloat) {
       aggregate_kernel_back<float> <<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
         ((float*)derData.getMemory(), (float*)derOutput.getMemory(), data.getHeight(), data.getWidth(), nthreads,
