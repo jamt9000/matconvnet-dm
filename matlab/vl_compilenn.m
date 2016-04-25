@@ -226,6 +226,7 @@ if opts.enableGpu
   lib_src{end+1} = fullfile(root,'matlab','src','bits','impl','normalize_gpu.cu') ;
   lib_src{end+1} = fullfile(root,'matlab','src','bits','impl','bnorm_gpu.cu') ;
   lib_src{end+1} = fullfile(root,'matlab','src','bits','datacu.cu') ;
+  mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnaggregate.' ext]) ;
 end
 
 % cuDNN-specific files
