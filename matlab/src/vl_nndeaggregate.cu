@@ -15,6 +15,7 @@ the terms of the BSD license (see the COPYING file).
 
 #if ENABLE_GPU
 #include "bits/datacu.hpp"
+#include <math_constants.h>
 #endif
 
 #include <assert.h>
@@ -48,20 +49,35 @@ deaggregate_kernel
         if (gh_in >= 0 && gh_in < inGridHeight && gw_in >= 0 && gw_in < inGridWidth) {
           out[index] = max(out[index], data[h + width * w + width * height * gh_in
                                   + width * height * inGridHeight * gw_in]);
-          //if (h==0 && w==0) {
-          //printf("i0 %d j0 %d i0' %d j0' %d val %f\n", gh_out, gw_out, gh_in, gw_in, data[h + width * w + width * height * gh_in
-          //                        + width * height * inGridHeight * gw_in]);
-          //}
         }
       }
     }
   }
 }
 
+// an implementation of atomicAdd() for double (really slow)
+__device__ double myAtomicAdd(double* address, double val)
+{
+  unsigned long long int* address_as_ull = (unsigned long long int*)address;
+  unsigned long long int old = *address_as_ull, assumed;
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val +
+                                         __longlong_as_double(assumed)));
+  } while (assumed != old);
+  return __longlong_as_double(old);
+}
+
+__device__ float myAtomicAdd(float* address, float val) {
+  return atomicAdd(address, val);
+}
+
 template<typename T> __global__ void
 deaggregate_kernel_back
 (T* out,
  const T* derOutput,
+ const T* data,
  const int height,
  const int width,
  const int nthreads,
@@ -75,7 +91,32 @@ deaggregate_kernel_back
   int index = threadIdx.x + blockIdx.x * blockDim.x;
 
   if (index < nthreads) {
+    int h = index % height ;
+    int w = (index / height) % width ;
+    int gh_out = (index / height / width) % outGridHeight ;
+    int gw_out = (index / height / width / outGridHeight) % outGridWidth ;
 
+    int maxIdx = -1 ;
+    T maxVal = (T)(-CUDART_INF_F);
+
+    for (int dw = 0; dw <= 1; ++dw) {
+      for (int dh = 0; dh <= 1; ++dh) {
+        int gh_in = gh_out - delta * dh + pad ;
+        int gw_in = gw_out - delta * dw + pad ;
+        if (gh_in >= 0 && gh_in < inGridHeight && gw_in >= 0 && gw_in < inGridWidth) {
+
+          T val = data[h + width * w + width * height * gh_in + width * height * inGridHeight * gw_in];
+          if (val > maxVal) {
+            maxVal = val ;
+            maxIdx = h + width * w + width * height * gh_in + width * height * inGridHeight * gw_in;
+          }
+        }
+      }
+    }
+
+    if (maxIdx >= 0) {
+      myAtomicAdd(out + maxIdx, derOutput[index]) ;
+    }
   }
 }
 
@@ -221,6 +262,7 @@ void mexFunction(int nout, mxArray *out[],
       mexErrMsgTxt("DATA and INITOUT do not have compatible formats.") ;
     }
   } else {
+    output.init(in[IN_INITOUT]) ;
     derData.initWithZeros(deviceType, dataType, data.getShape()) ;
   }
 
@@ -246,16 +288,16 @@ void mexFunction(int nout, mxArray *out[],
     }
 
   } else {
-    const int nthreads = derData.getHeight() * derData.getWidth() * derData.getDepth() * derData.getSize() ;
+    const int nthreads = output.getHeight() * output.getWidth() * output.getDepth() * output.getSize() ;
     if (dataType == vl::vlTypeFloat) {
       deaggregate_kernel_back<float> <<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
-        ((float*)derData.getMemory(), (float*)derOutput.getMemory(), data.getHeight(), data.getWidth(), nthreads,
+        ((float*)derData.getMemory(), (float*)derOutput.getMemory(), (float*)data.getMemory(), data.getHeight(), data.getWidth(), nthreads,
          data.getDepth(), data.getSize(), derOutput.getDepth(), derOutput.getSize(), delta, pad);
       error = vl::vlSuccess ;
     } else if (dataType == vl::vlTypeDouble) {
 #ifdef ENABLE_DOUBLE
       deaggregate_kernel_back<double> <<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
-        ((double*)derData.getMemory(), (double*)derOutput.getMemory(), data.getHeight(), data.getWidth(), nthreads,
+        ((double*)derData.getMemory(), (double*)derOutput.getMemory(), (double*)data.getMemory(), data.getHeight(), data.getWidth(), nthreads,
          data.getDepth(), data.getSize(), derOutput.getDepth(), derOutput.getSize(), delta, pad);
       error = vl::vlSuccess ;
 #endif
