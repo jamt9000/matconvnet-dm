@@ -30,7 +30,7 @@ using namespace vl ;
 
 #define DISPATCH(deviceType, op, type) \
 status = vl::impl::op<deviceType, type>::forward \
-((type*)output.getMemory(), (int64_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
+((type*)output.getMemory(), (uint32_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
 height, width, data.getDepth() * data.getSize(), \
 poolHeight, poolWidth, \
 strideY, strideX, \
@@ -109,7 +109,7 @@ vl::nnpooling_forward_switches(vl::Context& context,
 
 #define DISPATCH(deviceType, op, type) \
 status = vl::impl::op<deviceType, type>::backward \
-((type*)derData.getMemory(), (int64_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
+((type*)derData.getMemory(), (uint32_t*)poolSwitches.getMemory(), (type const*)data.getMemory(), \
 (type const*)derOutput.getMemory(), \
 height, width, data.getDepth() * data.getSize(), \
 poolHeight, poolWidth, \

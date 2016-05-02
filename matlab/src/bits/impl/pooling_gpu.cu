@@ -25,7 +25,7 @@ the terms of the BSD license (see the COPYING file).
 template<typename T> __global__ void
 pooling_max_switches_kernel
 (T* pooled,
- int64_t* poolSwitches,
+ uint32_t* poolSwitches,
  const T* data,
  const int pooledWidth,
  const int pooledHeight,
@@ -56,7 +56,7 @@ pooling_max_switches_kernel
     y1 = max(y1, 0) ;
 
     T bestValue = data[y1 * width + x1] ;
-	int64_t switchLocation = (pz * height + y1) * width + (x1 + 1) ;
+	uint32_t switchLocation = (pz * height + y1) * width + (x1 + 1) ;
 
     for (int y = y1 ; y < y2 ; ++y) {
       for (int x = x1 ; x < x2 ; ++x) {
@@ -345,7 +345,7 @@ template <typename T> __global__ void
 unpooling_max_forward
 (T* unpooled,
  const T* data,
- const int64_t* poolSwitches,
+ const uint32_t* poolSwitches,
  const int nthreads,
  const int pooledWidth,
  const int pooledHeight,
@@ -378,7 +378,7 @@ unpooling_max_forward
     data += z * pooledHeight * pooledWidth ;
     for (int py = py1; py <= py2; ++py) {
       for (int px = px1; px <= px2; ++px) {
-        int64_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
+        uint32_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
         if (maxIndex == index) {
           if (data[py * pooledWidth + px] > unpoolValue) {
             unpoolValue = data[py * pooledWidth + px];
@@ -398,7 +398,7 @@ template <typename T> __global__ void
 unpooling_max_backward
 (T* derData,
  const T* data,
- const int64_t* poolSwitches,
+ const uint32_t* poolSwitches,
  const T* derUnpooled,
  const int nthreads,
  const int pooledWidth,
@@ -435,7 +435,7 @@ unpooling_max_backward
     int derDataIndex = -1 ;
     for (int py = py1; py <= py2; ++py) {
       for (int px = px1; px <= px2; ++px) {
-        int64_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
+        uint32_t maxIndex = poolSwitches[py * pooledWidth + px] - 1;
         if (maxIndex == index) {
           if (data[py * pooledWidth + px] > unpoolValue) {
             unpoolValue = data[py * pooledWidth + px];
@@ -462,7 +462,7 @@ namespace vl { namespace impl {
   {
     static vl::Error
     forward(type* pooled,
-            int64_t* poolSwitches,
+            uint32_t* poolSwitches,
             type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -610,7 +610,7 @@ namespace vl { namespace impl {
   {
     static vl::Error
     forward(type* unpooled,
-            int64_t* poolSwitches,
+            uint32_t* poolSwitches,
             type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -635,7 +635,7 @@ namespace vl { namespace impl {
 
     static vl::Error
     backward(type* derData,
-             int64_t* poolSwitches,
+             uint32_t* poolSwitches,
              type const* data,
              type const* derOutput,
              size_t height, size_t width, size_t depth,

@@ -318,7 +318,7 @@ void mexFunction(int nout, mxArray *out[],
   
   if (!backMode) {
     output.initWithZeros(deviceType, dataType, outputShape) ;
-    if(enablePoolSwitches) { poolSwitches.initWithZeros(deviceType, vl::vlTypeInt64, outputShape) ; }
+    if(enablePoolSwitches) { poolSwitches.initWithZeros(deviceType, vl::vlTypeUInt32, outputShape) ; }
   } else {
     derData.initWithZeros(deviceType, dataType, data.getShape()) ;
   }

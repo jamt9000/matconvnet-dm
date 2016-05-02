@@ -86,7 +86,7 @@ struct acc_max_switches
     return value ;
   }
 
-  inline int64_t done_forward_switches() const {
+  inline uint32_t done_forward_switches() const {
     return switchLocation ;
   }
   inline void done_backward() const {
@@ -94,7 +94,7 @@ struct acc_max_switches
   }
 
   type value ;
-  int64_t switchLocation;
+  uint32_t switchLocation;
   type derOutput ;
   type* derDataActivePt ;
 } ;
@@ -165,7 +165,7 @@ struct acc_sum
 
 template<typename type, typename Accumulator> static inline void
 pooling_forward_switches_cpu(type* pooled,
-                    int64_t* poolSwitches,
+                    uint32_t* poolSwitches,
                     type const* data,
                     size_t width, size_t height, size_t depth,
                     size_t windowWidth, size_t windowHeight,
@@ -291,7 +291,7 @@ namespace vl { namespace impl {
   {
     static vl::Error
     forward(type* pooled,
-	        int64_t* switches,
+	        uint32_t* switches,
             type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -396,7 +396,7 @@ namespace vl { namespace impl {
 
     static vl::Error
     forward(type* unpooled,
-            int64_t* poolSwitches,
+            uint32_t* poolSwitches,
             type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -408,7 +408,7 @@ namespace vl { namespace impl {
 
     static vl::Error
     backward(type* derData,
-             int64_t* poolSwitches,
+             uint32_t* poolSwitches,
              type const* data,
              type const* derOutput,
              size_t height, size_t width, size_t depth,

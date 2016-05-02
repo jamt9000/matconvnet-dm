@@ -37,20 +37,20 @@ namespace vl {
     vlTypeChar,
     vlTypeFloat,
     vlTypeDouble,
-	vlTypeInt64
+	vlTypeUInt32
   } ;
 
   template <vl::Type id> struct DataTypeTraits { } ;
   template <> struct DataTypeTraits<vlTypeChar> { typedef char type ; } ;
   template <> struct DataTypeTraits<vlTypeFloat> { typedef float type ; } ;
   template <> struct DataTypeTraits<vlTypeDouble> { typedef double type ; } ;
-  template <> struct DataTypeTraits<vlTypeInt64> { typedef int64_t type ; } ;
+  template <> struct DataTypeTraits<vlTypeUInt32> { typedef uint32_t type ; } ;
 
   template <typename type> struct BuiltinToDataType {} ;
   template <> struct BuiltinToDataType<char> { enum { dataType = vlTypeChar } ; } ;
   template <> struct BuiltinToDataType<float> { enum { dataType = vlTypeFloat } ; } ;
   template <> struct BuiltinToDataType<double> { enum { dataType = vlTypeDouble } ; } ;
-  template <> struct BuiltinToDataType<int64_t> { enum { dataType = vlTypeInt64 } ; } ;
+  template <> struct BuiltinToDataType<uint32_t> { enum { dataType = vlTypeUInt32 } ; } ;
 
   enum Error {
     vlSuccess = 0,

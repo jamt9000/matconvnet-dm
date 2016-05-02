@@ -24,7 +24,7 @@ namespace vl { namespace impl {
 
     static vl::Error
     forward(data_type* output,
-			int64_t * poolSwitches,
+			uint32_t * poolSwitches,
             data_type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -82,7 +82,7 @@ namespace vl { namespace impl {
 
     static vl::Error
     forward(data_type* unpooled,
-            int64_t* poolSwitches,
+            uint32_t* poolSwitches,
             data_type const* data,
             size_t height, size_t width, size_t depth,
             size_t poolHeight, size_t poolWidth,
@@ -91,7 +91,7 @@ namespace vl { namespace impl {
 
     static vl::Error
     backward(data_type* derData,
-             int64_t* poolSwitches,
+             uint32_t* poolSwitches,
              data_type const* data,
              data_type const* derOutput,
              size_t height, size_t width, size_t depth,

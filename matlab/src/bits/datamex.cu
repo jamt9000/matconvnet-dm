@@ -201,9 +201,9 @@ vl::MexTensor::initHelper(Device newDeviceType, Type newDataType,
       classID = mxSINGLE_CLASS ;
       break ;
 	
-	case vlTypeInt64:
-	  newMemorySize *= sizeof(DataTypeTraits<vlTypeInt64>::type) ;
-	  classID = mxINT64_CLASS ;
+	case vlTypeUInt32:
+	  newMemorySize *= sizeof(DataTypeTraits<vlTypeUInt32>::type) ;
+	  classID = mxUINT32_CLASS ;
 	  break ;
 
 #ifdef ENABLE_DOUBLE
@@ -398,9 +398,9 @@ vl::MexTensor::init(mxArray const * array_)
       newMemorySize *= sizeof(DataTypeTraits<vlTypeFloat>::type) ;
       break ;
 
-	case mxINT64_CLASS:
-      newDataType = vlTypeInt64 ;
-	  newMemorySize *= sizeof(DataTypeTraits<vlTypeInt64>::type) ;
+	case mxUINT32_CLASS:
+      newDataType = vlTypeUInt32 ;
+	  newMemorySize *= sizeof(DataTypeTraits<vlTypeUInt32>::type) ;
 	  break;
 
 #ifdef ENABLE_DOUBLE
