@@ -229,6 +229,7 @@ if opts.enableGpu
   mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnaggregate.' ext]) ;
   mex_src{end+1} = fullfile(root,'matlab','src',['vl_nndeaggregate.' ext]) ;
   mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnmaxpooldm.' ext]) ;
+  mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnunpooldm.' ext]) ;
 
 end
 

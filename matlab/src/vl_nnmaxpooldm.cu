@@ -167,7 +167,7 @@ pooling_max_backward_switches_dm_kernel
         int lx = loc % poolWidth ;
         int ly = loc / poolWidth ;
         //if (index == 1234) {
-        //  printf("index %d loc %d lx %x ly %d x1 %d y1 %d x_data %d y_data %d isloc %d\n", index, loc+1, lx, ly, x1, y1, x_data, y_data, x_data == (x1 + lx) && y_data == (y1 +ly));
+        //  printf("index %d loc %d lx %d ly %d x1 %d y1 %d x_data %d y_data %d isloc %d\n", index, loc+1, lx, ly, x1, y1, x_data, y_data, x_data == (x1 + lx) && y_data == (y1 +ly));
         //  printf("py1 %d py2 %d px1 %d px2 %d\n", py1,py2,px1,px2);
         //}
         if(x_data == (x1 + lx) && y_data == (y1 +ly)) {
