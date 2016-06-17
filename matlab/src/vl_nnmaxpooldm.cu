@@ -354,6 +354,9 @@ void mexFunction(int nout, mxArray *out[],
 
   if (poolSwitchesIn != NULL) {
     poolSwitches.init(poolSwitchesIn) ;
+    if (poolSwitches.getDeviceType() != deviceType) {
+      mexErrMsgTxt("PoolSwitches and data have different device type") ;
+    }
   }
   
   if (!backMode) {
