@@ -283,9 +283,9 @@ void mexFunction(int nout, mxArray *out[],
     derOutput.reshape(4) ; // -> 4 dimensions
   }
 
-  if (backMode && ! vl::areCompatible(data, derOutput)) {
-    mexErrMsgTxt("DATA and DEROUTPUT do not have compatible formats.") ;
-  }
+  //if (backMode && ! vl::areCompatible(data, derOutput)) {
+    //mexErrMsgTxt("DATA and DEROUTPUT do not have compatible formats.") ;
+  //}
 
   if (backMode && poolSwitchesIn == NULL) {
     mexErrMsgTxt("Backward requires PoolSwitches") ;
@@ -342,7 +342,14 @@ void mexFunction(int nout, mxArray *out[],
   }
 
   /* Create output buffers */
-  vl::Device deviceType = data.getDeviceType() ;
+  vl::Device deviceType ;
+  if (backMode) {
+    // data can be CPU since its memory is not used
+    deviceType = derOutput.getDeviceType() ;
+  } else {
+    deviceType = data.getDeviceType() ;
+  }
+
   vl::Type dataType = data.getDataType() ;
   vl::MexTensor output(context) ;
   vl::MexTensor poolSwitches(context) ;
