@@ -18,6 +18,7 @@ enum {
   opt_radius,
   opt_pad,
   opt_rectifyborder,
+  opt_data_size,
   opt_verbose,
 } ;
 
@@ -30,6 +31,7 @@ vlmxOption  options [] = {
   {"Radius",             1,   opt_radius              },
   {"Pad",                1,   opt_pad                 },
   {"RectifyBorder",      0,   opt_rectifyborder       },
+  {"DataSize",           1,   opt_data_size           },
   {"Verbose",            0,   opt_verbose             },
   {0,                    0,   0                       }
 } ;
@@ -128,6 +130,75 @@ cropradius_dm_kernel
   }
 }
 
+
+/* ---------------------------------------------------------------- */
+/*                                 cropradius_backward_dm_kernel    */
+/* ---------------------------------------------------------------- */
+
+template<typename T> __global__ void
+cropradius_backward_dm_kernel
+(T* derData,
+ const T* derOutput,
+ const int height,
+ const int width,
+ const int gridHeight,
+ const int gridWidth,
+ const int stride0,
+ const int stride1,
+ const int offset0,
+ const int offset1,
+ const int pad,
+ const int radius,
+ const int nthreads,
+ const bool rectifyBorder)
+{
+  int index = threadIdx.x + blockIdx.x * blockDim.x;
+  if (index < nthreads) {
+    int cropsize = 2 *radius + 1 ;
+    int ri = index % cropsize ;
+    int rj = (index / cropsize) % cropsize ;
+    int i = index / (cropsize * cropsize) ;
+    int i0 = i % gridHeight ;
+    int j0 = i / gridHeight ;
+    int i0_pixels = i0 * stride0 + offset0 ;
+    int j0_pixels = j0 * stride0 + offset0 ;
+    int i1 = (i0_pixels - offset1)/stride1 + (ri - radius) + pad ;
+    int j1 = (j0_pixels - offset1)/stride1 + (rj - radius) + pad ;
+
+    //if (i0 == 0 &&j0 == 0 && ri == 0) {
+    //    printf("i0 %d j0 %d rj %d j1 %d\n", i0, j0, rj, j1) ;
+    //}
+
+    if (i1 >= 0 && i1 < height && j1 >= 0 && j1 < width) {
+      T out = derOutput[index] ;
+
+      T nMissing ;
+      if (rectifyBorder) {
+        // TODO don't hardcode 4
+        if (i1 < pad) {
+          nMissing = 4 - pad + i1 ;
+          out *= 4. / nMissing ;
+        }
+        if (j1 < pad) {
+          nMissing = 4 - pad + j1 ;
+          out *= 4. / nMissing ;
+        }
+        if (height - i1 - 1 < pad) {
+          nMissing = 4 - pad + (height - i1 - 1) ; 
+          out *= 4. / nMissing ;
+        }
+        if (width - j1 - 1 < pad) {
+          nMissing = 4. - pad + (width - j1 - 1) ;
+          out *= 4. / nMissing ;
+        }
+      }
+
+      derData[i1 + height * j1 + width * height * i0
+            + width * height * gridHeight * j0] = out ;
+    }
+  }
+}
+
 void mexFunction(int nout, mxArray *out[],
                  int nin, mxArray const *in[])
 {
@@ -139,6 +210,7 @@ void mexFunction(int nout, mxArray *out[],
   int radius = 128 ;
   int pad = 0 ;
   bool rectifyBorder = false;
+  vl::TensorShape dataSize ;
 
   int verbosity = 0 ;
   int opt ;
@@ -250,6 +322,20 @@ void mexFunction(int nout, mxArray *out[],
         rectifyBorder = true ;
         break ;
 
+      case opt_data_size :
+        if (!vlmxIsPlainMatrix(optarg,-1,-1)) {
+          mexErrMsgTxt("DATASIZE is not a plain matrix.") ;
+        }
+        if (mxGetNumberOfElements(optarg) == 4) {
+          dataSize = vl::TensorShape((int)mxGetPr(optarg)[0],
+                                     (int)mxGetPr(optarg)[1],
+                                     (int)mxGetPr(optarg)[2],
+                                     (int)mxGetPr(optarg)[3]);
+        } else {
+          mexErrMsgTxt("DATASIZE does not have 4 elements.") ;
+        }
+        break ;
+
       default:
         break ;
     }
@@ -265,10 +351,23 @@ void mexFunction(int nout, mxArray *out[],
   if (backMode) {
     derOutput.init(in[IN_DEROUTPUT]) ;
     derOutput.reshape(4) ; // -> 4 dimensions
+    if (!dataSize.isEmpty() && !data.isEmpty()) {
+      dataSize = vl::TensorShape(data.getHeight(),
+          data.getWidth(),
+          data.getDepth(),
+          data.getSize());
+    }
+  } else {
+    dataSize = vl::TensorShape(data.getHeight(),
+        data.getWidth(),
+        data.getDepth(),
+        data.getSize());
   }
 
   if (backMode && ! vl::areCompatible(data, derOutput)) {
-    mexErrMsgTxt("DATA and DEROUTPUT do not have compatible formats.") ;
+    if (!data.isEmpty()) {
+        mexErrMsgTxt("DATA and DEROUTPUT do not have compatible formats.") ;
+    }
   }
 
 
@@ -289,16 +388,24 @@ void mexFunction(int nout, mxArray *out[],
   /* Get the output Shape */
   vl::TensorShape outputShape(2 * radius + 1,
                               2 * radius + 1,
-                              data.getDepth(),
-                              data.getSize()) ;
+                              dataSize.getDepth(),
+                              dataSize.getSize()) ;
 
   if (backMode && (derOutput != outputShape)) {
     mexErrMsgTxt("DEROUTPUT dimensions are incompatible with X and POOL.") ;
   }
 
   /* Create output buffers */
-  vl::Device deviceType = data.getDeviceType() ;
-  vl::Type dataType = data.getDataType() ;
+  vl::Device deviceType ;
+  vl::Type dataType;
+  if (backMode) {
+    // data can be CPU since its memory is not used
+    deviceType = derOutput.getDeviceType() ;
+    dataType = derOutput.getDataType() ;
+  } else {
+    deviceType = data.getDeviceType() ;
+    dataType = data.getDataType() ;
+  }
   vl::MexTensor output(context) ;
   vl::MexTensor derData(context) ;
 
@@ -310,14 +417,17 @@ void mexFunction(int nout, mxArray *out[],
   if (!backMode) {
     output.initWithZeros(deviceType, dataType, outputShape) ;
   } else {
-    derData.initWithZeros(deviceType, dataType, data.getShape()) ;
+    if (dataSize.isEmpty()) {
+      mexErrMsgTxt("Must provide DATASIZE for backward pass") ;
+    }
+    derData.initWithZeros(deviceType, dataType, dataSize) ;
   }
 
   // Dispatch
-  int height = data.getHeight() ;
-  int width = data.getWidth() ;
-  int gridHeight = data.getDepth() ;
-  int gridWidth = data.getSize() ;
+  int height = dataSize.getHeight() ;
+  int width = dataSize.getWidth() ;
+  int gridHeight = dataSize.getDepth() ;
+  int gridWidth = dataSize.getSize() ;
   int cropsize = 2 * radius + 1 ;
   int nthreads = cropsize * cropsize * gridHeight * gridWidth ;
 
@@ -340,10 +450,18 @@ void mexFunction(int nout, mxArray *out[],
   } else {
     // Backward
     if (dataType == vl::vlTypeFloat) {
-    // todo
+      cropradius_backward_dm_kernel<float>
+	<<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
+	((float*) derData.getMemory(), (const float*) derOutput.getMemory(),
+	 height, width, gridHeight, gridWidth, stride0, stride1,
+         offset0, offset1, pad, radius, nthreads, rectifyBorder);
     } else if (dataType == vl::vlTypeDouble) {
 #ifdef ENABLE_DOUBLE
-    // todo
+      cropradius_backward_dm_kernel<double>
+	<<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
+	((double*) derData.getMemory(), (const double*) derOutput.getMemory(),
+	 height, width, gridHeight, gridWidth, stride0, stride1,
+         offset0, offset1, pad, radius, nthreads, rectifyBorder);
 #endif
     }
   }
@@ -358,5 +476,4 @@ void mexFunction(int nout, mxArray *out[],
   } else {
     out[OUT_RESULT] = output.relinquish() ;
   }
-  fflush(stdout) ;
 }
