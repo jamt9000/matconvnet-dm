@@ -247,7 +247,7 @@ default: assert(false) ; return ; \
      strideY, strideX, \
      padTop, padBottom, padLeft, padRight) ;
 
-    switch (output.getDeviceType()) {
+    switch (dataType) {
     default:
       assert(false) ;
       error = vl::vlErrorUnknown ;
@@ -275,7 +275,7 @@ default: assert(false) ; return ; \
      strideY, strideX, \
      padTop, padBottom, padLeft, padRight) ;
 
-    switch (output.getDeviceType()) {
+    switch (dataType) {
     default:
       assert(false) ;
       error = vl::vlErrorUnknown ;
