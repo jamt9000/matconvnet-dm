@@ -62,6 +62,25 @@ enum {
   OUT_RESULT = 0, OUT_GRADIENT, OUT_END
 } ;
 
+
+// an implementation of atomicAdd() for double (really slow)
+__device__ double myAtomicAdd_structuredloss(double* address, double val)
+{
+  unsigned long long int* address_as_ull = (unsigned long long int*)address;
+  unsigned long long int old = *address_as_ull, assumed;
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val +
+                                         __longlong_as_double(assumed)));
+  } while (assumed != old);
+  return __longlong_as_double(old);
+}
+
+__device__ float myAtomicAdd_structuredloss(float* address, float val) {
+  return atomicAdd(address, val);
+}
+
 /* ---------------------------------------------------------------- */
 /*                           structuredloss_dm_threshold_kernel     */
 /* ---------------------------------------------------------------- */
@@ -111,14 +130,20 @@ structuredloss_dm_threshold_kernel
     int gtj = (int) round(jj) ;
 
     if (gti == i1 && gtj == j1) {
-        output[index] = 0. ;
+      output[index] = 0. ;
     }
     else if (gti >= 0 && gti < height && gtj >= 0 && gtj < width) {
+      // Variable margin
+      T g = 0.0 ;
+      if (sigmasq > 0) {
+        T d = sqrt((ii - i1)*(ii - i1) + (jj - j1)*(jj - j1)) ;
+        g = exp(-(d*d)/(2*sigmasq)) ;
+      }
       // Ground truth score
       T Sgt = data[gti + height * gtj + width * height * i0
                         + width * height * gridHeight * j0] ;
       if (!isinf(Sgt)) {
-        T thresh = alpha + data[index] - Sgt;
+        T thresh = alpha - g + data[index] - Sgt ;
         output[index] = (max)((T)0, thresh) ;
       }
     }
@@ -177,14 +202,20 @@ structuredloss_dm_binarise_kernel
         //output[index] = 0. ;
     }
     else if (gti >= 0 && gti < height && gtj >= 0 && gtj < width) {
+      // Variable margin
+      T g = 0.0 ;
+      if (sigmasq > 0) {
+        T d = sqrt((ii - i1)*(ii - i1) + (jj - j1)*(jj - j1)) ;
+        g = exp(-(d*d)/(2*sigmasq)) ;
+      }
       // Ground truth score
       T Sgt = data[gti + height * gtj + width * height * i0
                         + width * height * gridHeight * j0] ;
       if (!isinf(Sgt)) {
-        T thresh = alpha + data[index] - Sgt;
+        T thresh = alpha - g + data[index] - Sgt;
         if (thresh > 0) {
           output[index] = 1 ;
-          atomicAdd(output + gti + height * gtj + width * height * i0
+          myAtomicAdd_structuredloss(output + gti + height * gtj + width * height * i0
                      + width * height * gridHeight * j0, -1) ;
         }
       }
@@ -309,7 +340,7 @@ void mexFunction(int nout, mxArray *out[],
         }
         switch (mxGetNumberOfElements(optarg)) {
           case 1:
-            alpha = mxGetPr(optarg)[0] ;
+            sigma = mxGetPr(optarg)[0] ;
             break ;
           default:
             mexErrMsgTxt("ALPHA has more than one element.") ;
@@ -372,9 +403,10 @@ void mexFunction(int nout, mxArray *out[],
   int gtHeight = groundTruth.getHeight() ;
   int gtWidth = groundTruth.getWidth() ;
   int nthreads = height * width * gridHeight * gridWidth ;
-  float loss  = 0;
+  double loss  = 0. ;
 
   if (dataType == vl::vlTypeFloat) {
+    float lossf = 0. ;
     structuredloss_dm_threshold_kernel<float>
       <<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
       ((float*) output.getMemory(), (const float*) data.getMemory(),
@@ -390,7 +422,8 @@ void mexFunction(int nout, mxArray *out[],
       mexErrMsgTxt("Previous CUBLAS Error in vl_nnstructuredlossdm") ;
     }
 
-    status = cublasSasum(handle, nthreads, (const float*) output.getMemory(), 1, &loss) ;
+    status = cublasSasum(handle, nthreads, (const float*) output.getMemory(), 1, &lossf) ;
+    loss = (double) lossf ;
 
     if (status != CUBLAS_STATUS_SUCCESS) {
       mexErrMsgTxt("CUBLAS Error in vl_nnstructuredlossdm") ;
@@ -405,8 +438,33 @@ void mexFunction(int nout, mxArray *out[],
 
   } else if (dataType == vl::vlTypeDouble) {
 #ifdef ENABLE_DOUBLE
-  // todo
-  mexErrMsgTxt("DOUBLE precision not implemented") ;
+    structuredloss_dm_threshold_kernel<double>
+      <<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
+      ((double*) output.getMemory(), (const double*) data.getMemory(),
+       (const double*) groundTruth.getMemory(),
+       height, width, gridHeight, gridWidth, gtHeight, gtWidth, stride0, stride1,
+       offset0, offset1, radius, alpha, sigma * sigma, nthreads);
+
+    cublasHandle_t handle ;
+    cublasStatus_t status ;
+    status = context.getCudaHelper().getCublasHandle(&handle) ;
+
+    if (status != CUBLAS_STATUS_SUCCESS) {
+      mexErrMsgTxt("Previous CUBLAS Error in vl_nnstructuredlossdm") ;
+    }
+
+    status = cublasDasum(handle, nthreads, (const double*) output.getMemory(), 1, &loss) ;
+
+    if (status != CUBLAS_STATUS_SUCCESS) {
+      mexErrMsgTxt("CUBLAS Error in vl_nnstructuredlossdm") ;
+    }
+
+    structuredloss_dm_binarise_kernel<double>
+      <<< vl::divideUpwards(nthreads, VL_CUDA_NUM_THREADS), VL_CUDA_NUM_THREADS >>>
+      ((double*) output.getMemory(), (const double*) data.getMemory(),
+       (const double*) groundTruth.getMemory(),
+       height, width, gridHeight, gridWidth, gtHeight, gtWidth, stride0, stride1,
+       offset0, offset1, radius, alpha, sigma * sigma, nthreads);
 #endif
   }
   
