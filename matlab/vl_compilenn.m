@@ -231,6 +231,7 @@ if opts.enableGpu
   mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnmaxpooldm.' ext]) ;
   mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnunpooldm.' ext]) ;
   mex_src{end+1} = fullfile(root,'matlab','src',['vl_nncropradiusdm.' ext]) ;
+  mex_src{end+1} = fullfile(root,'matlab','src',['vl_nnstructuredlossdm.' ext]) ;
 
 end
 

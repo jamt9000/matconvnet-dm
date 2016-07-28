@@ -183,9 +183,9 @@ structuredloss_dm_binarise_kernel
       if (!isinf(Sgt)) {
         T thresh = alpha + data[index] - Sgt;
         if (thresh > 0) {
-          output[index] = 0 ;
+          output[index] = 1 ;
           atomicAdd(output + gti + height * gtj + width * height * i0
-                     + width * height * gridHeight * j0, 1) ;
+                     + width * height * gridHeight * j0, -1) ;
         }
       }
     }
