@@ -136,14 +136,14 @@ structuredloss_dm_threshold_kernel
       // Variable margin
       T g = 0.0 ;
       if (sigmasq > 0) {
-        T d = sqrt((ii - i1)*(ii - i1) + (jj - j1)*(jj - j1)) ;
-        g = exp(-(d*d)/(2*sigmasq)) ;
+        T dsq = (ii - i1)*(ii - i1) + (jj - j1)*(jj - j1) ;
+        g = exp(-(dsq)/(2*sigmasq)) ;
       }
       // Ground truth score
       T Sgt = data[gti + height * gtj + width * height * i0
                         + width * height * gridHeight * j0] ;
       if (!isinf(Sgt)) {
-        T thresh = alpha - g + data[index] - Sgt ;
+        T thresh = alpha - alpha * g + data[index] - Sgt ;
         output[index] = (max)((T)0, thresh) ;
       }
     }
@@ -205,14 +205,14 @@ structuredloss_dm_binarise_kernel
       // Variable margin
       T g = 0.0 ;
       if (sigmasq > 0) {
-        T d = sqrt((ii - i1)*(ii - i1) + (jj - j1)*(jj - j1)) ;
-        g = exp(-(d*d)/(2*sigmasq)) ;
+        T dsq = (ii - i1)*(ii - i1) + (jj - j1)*(jj - j1) ;
+        g = exp(-(dsq)/(2*sigmasq)) ;
       }
       // Ground truth score
       T Sgt = data[gti + height * gtj + width * height * i0
                         + width * height * gridHeight * j0] ;
       if (!isinf(Sgt)) {
-        T thresh = alpha - g + data[index] - Sgt;
+        T thresh = alpha - alpha * g + data[index] - Sgt;
         if (thresh > 0) {
           output[index] = 1 ;
           myAtomicAdd_structuredloss(output + gti + height * gtj + width * height * i0
